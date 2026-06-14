@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simplest Mind App - Kuiz Interaktif</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body>
+    <div id="splash-screen" class="screen active">
+        <div class="loader-container">
+            <div class="minimal-spinner"></div>
+            <h2>Menyediakan Sesi Kuiz...</h2>
+            <p id="splash-status">Sila tunggu sebentar.</p>
+        </div>
+    </div>
+
+    <div id="candidate-screen" class="screen">
+        <div class="card">
+            <h2>Maklumat Calon</h2>
+            <div class="form-group">
+                <label for="student-name">Nama Penuh</label>
+                <input type="text" id="student-name" placeholder="Masukkan nama anda">
+            </div>
+            <div class="form-group">
+                <label for="student-id">ID Pelajar</label>
+                <input type="text" id="student-id" placeholder="Masukkan ID pelajar">
+            </div>
+            <div class="form-group">
+                <label for="student-course">Kursus / Kelas</label>
+                <input type="text" id="student-course" placeholder="Contoh: DET3A">
+            </div>
+            <button id="btn-save-candidate" class="btn primary">Simpan Maklumat</button>
+            <button id="btn-start-quiz" class="btn success" disabled>Mula Kuiz</button>
+        </div>
+    </div>
+
+    <div id="quiz-screen" class="screen">
+        <header class="quiz-header">
+            <div>Soalan <span id="current-q-num">1</span>/<span id="total-q-num">10</span></div>
+            <div class="timer-display">Masa: <span id="timer">30</span>s</div>
+            <div>Markah: <span id="score-display">0</span></div>
+        </header>
+        <div class="quiz-body">
+            <div class="question-container">
+                <h3 id="question-text">Soalan Kuiz di sini...</h3>
+                <div id="image-holder" class="image-container"></div>
+            </div>
+            <div class="answers-grid">
+                <button class="answer-btn" data-option="A"><span class="prefix">A</span> <span id="opt-a-text">Pilihan A</span></button>
+                <button class="answer-btn" data-option="B"><span class="prefix">B</span> <span id="opt-b-text">Pilihan B</span></button>
+                <button class="answer-btn" data-option="C"><span class="prefix">C</span> <span id="opt-c-text">Pilihan C</span></button>
+                <button class="answer-btn" data-option="D"><span class="prefix">D</span> <span id="opt-d-text">Pilihan D</span></button>
+            </div>
+        </div>
+        <footer class="quiz-footer">
+            <button id="btn-confirm-answer" class="btn primary" disabled>Sahkan Jawapan</button>
+            <button id="btn-next" class="btn secondary" style="display:none;">Seterusnya</button>
+        </footer>
+    </div>
+
+    <div id="result-screen" class="screen">
+        <div id="pdf-content-area" class="result-card">
+            <h2>Keputusan Kuiz Anda</h2>
+            <div class="score-summary">
+                <h3>Markah Akhir: <span id="final-score">0</span>%</h3>
+            </div>
+            <div class="analysis-section">
+                <h3>Analisis AI & Maklum Balas</h3>
+                <p id="ai-feedback">Menunggu analisis daripada Gemini AI...</p>
+                
+                <h3>Nota Kajian Peribadi (Study Notes)</h3>
+                <div id="ai-study-notes" class="study-notes-box">Menjana nota peribadi anda...</div>
+            </div>
+        </div>
+        <div class="result-actions">
+            <button id="btn-download-pdf" class="btn primary">Muat Turun PDF</button>
+            <button id="btn-print-pdf" class="btn secondary">Cetak Nota</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
