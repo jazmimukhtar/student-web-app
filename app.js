@@ -1,9 +1,14 @@
-// Konfigurasi Sistem (Sila kemas kini nilai di sini)
-const GEMINI_API_KEY = "MASUKKAN_GEMINI_API_KEY_ANDA_DI_SINI";
-const WEB_APP_URL = "MASUKKAN_APPS_SCRIPT_WEB_APP_URL_DI_SINI";
+// ==========================================================================
+// CONFIGURATION & GLOBAL STATES
+// ==========================================================================
+// Nota Keselamatan: GEMINI_API_KEY dibiarkan kosong untuk keselamatan GitHub Public.
+// Kunci API akan dibaca secara selamat melalui parameter URL (?key=AIzaSy...)
+const GEMINI_API_KEY = ""; 
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyq4qAjeBxAgUVO4XxMFLygXddTnT27AVRHAZ0oKFUnz4k8VXmsv_cWT8z1xUlWpZjm/exec"; 
 
 let quizId = null;
 let sessionToken = null;
+let dynamicApiKey = null;
 let questions = [];
 let randomizedQuestions = [];
 let currentQuestionIndex = 0;
@@ -13,25 +18,27 @@ let timerInterval = null;
 let timeLeft = 30;
 let candidateInfo = { name: '', id: '', course: '' };
 
-// Inisialisasi parameter URL Web Pelajar
+// ==========================================================================
+// INITIALIZATION & ANTI-CHEAT PROTECTION
+// ==========================================================================
 window.addEventListener('load', () => {
     const urlParams = new URLSearchParams(window.location.search);
     quizId = urlParams.get('quizId');
     sessionToken = urlParams.get('sessionToken');
+    dynamicApiKey = urlParams.get('key'); // Membaca Kunci API secara dinamik dari URL
 
-    // Anti-Cheat: Buang parameter dari address bar untuk keselamatan
+    // ANTI-CHEAT: Padam semua parameter sensitif dari address bar browser serta-merta
     if (window.history && window.history.replaceState) {
         window.history.replaceState(null, '', window.location.pathname);
     }
 
-    // Semak Recovery State (Sesi Interupsi / Sambung Semula)
+    // Semak Status Sesi Terinterupsi (Internet Interruption Recovery)
     const savedState = localStorage.getItem('mind_app_state');
     if (savedState) {
         try {
             const parsed = JSON.parse(savedState);
-            // Jika quizId sama & status belum selesai sepenuhnya (seperti IN_PROGRESS dalam simpanan tempatan)
             if (parsed.quizId === quizId && parsed.status === 'IN_PROGRESS') {
-                if (confirm("Sesi kuiz sebelumnya dikesan. Adakah anda ingin menyambung semula?")) {
+                if (confirm("Sesi kuiz sebelum ini dikesan terputus. Adakah anda ingin menyambung semula?")) {
                     restoreSession(parsed);
                     return;
                 } else {
@@ -39,12 +46,13 @@ window.addEventListener('load', () => {
                 }
             }
         } catch(e) {
-            console.error("Gagal membaca state", e);
+            console.error("Gagal memulihkan sesi lama:", e);
         }
     }
 
-    if (!quizId || !sessionToken) {
-        showSplashStatus("Pautan Sesi Tidak Sah", "Sila imbas semula QR Code yang dibekalkan oleh Pensyarah anda.", true);
+    // Jika parameter tidak lengkap, sekat kemasukan
+    if (!quizId || !sessionToken || !dynamicApiKey) {
+        showSplashStatus("Sesi Tidak Sah / Tamat Tempoh", "Sila dapatkan imbasan QR Code terbaharu daripada Pensyarah anda.", true);
         return;
     }
 
@@ -52,15 +60,24 @@ window.addEventListener('load', () => {
 });
 
 function showSplashStatus(title, subtitle, isError = false) {
-    document.getElementById('splash-status').innerHTML = `<strong>${title}</strong><br>${subtitle}`;
+    const statusElement = document.getElementById('splash-status');
+    if (statusElement) {
+        statusElement.innerHTML = `<strong>${title}</strong><br>${subtitle}`;
+    }
     if (isError) {
-        document.querySelector('.minimal-spinner').style.display = 'none';
-        document.querySelector('.minimal-spinner').style.backgroundColor = 'var(--danger)';
+        const spinner = document.querySelector('.minimal-spinner');
+        if (spinner) {
+            spinner.style.display = 'none';
+            spinner.style.backgroundColor = 'var(--danger)';
+        }
     }
 }
 
+// ==========================================================================
+// NETWORK API OPERATIONS
+// ==========================================================================
 async function validateSessionAndFetchQuiz() {
-    showSplashStatus("Memvalidasi Sesi...", "Menghubungi pangkalan data pensyarah.");
+    showSplashStatus("Memvalidasi Sesi...", "Sedang memuat turun data kuiz dari pangkalan data.");
     try {
         const fetchUrl = `${WEB_APP_URL}?action=getQuiz&quizId=${encodeURIComponent(quizId)}&sessionToken=${encodeURIComponent(sessionToken)}`;
         const response = await fetch(fetchUrl);
@@ -68,24 +85,25 @@ async function validateSessionAndFetchQuiz() {
 
         if (data.status === "success" && data.questions && data.questions.length > 0) {
             questions = data.questions;
-            // Persiapan Sesi Kuiz - Rawak Soalan (Fisher-Yates Shuffle)
             initQuizEngine();
             setTimeout(() => {
                 switchScreen('candidate-screen');
             }, 1000);
         } else {
-            showSplashStatus("Sesi Tidak Sah", data.error || "Sila imbas QR code yang sah atau hubungi pensyarah.", true);
+            showSplashStatus("Sesi Penuh Tidak Sah", data.error || "Sila hubungi pensyarah pengawas bilik kuliah.", true);
         }
     } catch(err) {
-        showSplashStatus("Rangkaian Tergendala", "Sila periksa sambungan internet anda dan muat semula halaman.", true);
+        showSplashStatus("Rangkaian Tergendala", "Sila periksa sambungan internet anda dan muat semula halaman web.", true);
     }
 }
 
+// ==========================================================================
+// QUIZ ENGINE CORE (FISHER-YATES SHUFFLE)
+// ==========================================================================
 function initQuizEngine() {
     randomizedQuestions = [...questions];
     fisherYatesShuffle(randomizedQuestions);
 
-    // Rawak pilihan A, B, C, D untuk setiap soalan (Kekalkan padanan jawapan betul)
     randomizedQuestions.forEach(q => {
         const options = [
             { text: q.optionA, val: 'A' },
@@ -95,12 +113,10 @@ function initQuizEngine() {
         ];
         fisherYatesShuffle(options);
         
-        // Simpan semula susunan opsyen yang diubah bersama jawapan betul baharu
         q.shuffledOptions = options;
         const correctMapping = { 'A': q.optionA, 'B': q.optionB, 'C': q.optionC, 'D': q.optionD };
         const correctText = correctMapping[q.correctAnswer];
         
-        // Cari abjad baharu untuk jawapan betul dalam pilihan rawak
         options.forEach((opt, idx) => {
             if (opt.text === correctText) {
                 const mapKeys = ['A', 'B', 'C', 'D'];
@@ -119,17 +135,22 @@ function fisherYatesShuffle(array) {
 
 function switchScreen(screenId) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    document.getElementById(screenId).classList.add('active');
+    const targetScreen = document.getElementById(screenId);
+    if (targetScreen) {
+        targetScreen.classList.add('active');
+    }
 }
 
-// Interaksi Calon
+// ==========================================================================
+// CANDIDATE INTERACTION
+// ==========================================================================
 document.getElementById('btn-save-candidate').addEventListener('click', () => {
     const name = document.getElementById('student-name').value.trim();
     const id = document.getElementById('student-id').value.trim();
     const course = document.getElementById('student-course').value.trim();
 
     if(!name || !id || !course) {
-        alert("Sila lengkapkan semua maklumat calon.");
+        alert("Sila isi semua maklumat calon sebelum meneruskan.");
         return;
     }
 
@@ -138,15 +159,14 @@ document.getElementById('btn-save-candidate').addEventListener('click', () => {
     document.getElementById('student-id').disabled = true;
     document.getElementById('student-course').disabled = true;
     document.getElementById('btn-save-candidate').disabled = true;
+    document.getElementById('btn-save-candidate').textContent = "Saved";
     document.getElementById('btn-start-quiz').disabled = false;
-    alert("Maklumat disimpan. Anda kini boleh memulakan kuiz.");
 });
 
 document.getElementById('btn-start-quiz').addEventListener('click', () => {
-    // Simpan local state sbg sokongan tergendala internet
     saveLocalState('IN_PROGRESS');
     
-    // Pasang Event Listener Anti-Keluar (Force Exit Protection)
+    // Aktifkan Pengawasan Keluar Paksa (Force Exit Anti-Cheat)
     window.addEventListener('beforeunload', forceExitHandler);
     document.addEventListener('visibilitychange', visibilityChangeHandler);
 
@@ -154,9 +174,12 @@ document.getElementById('btn-start-quiz').addEventListener('click', () => {
     loadQuestion();
 });
 
+// ==========================================================================
+// INTERRUPTION & FORCE EXIT PROTECTION
+// ==========================================================================
 function saveLocalState(status) {
     const state = {
-        quizId, sessionToken, status, candidateInfo,
+        quizId, sessionToken, dynamicApiKey, status, candidateInfo,
         questions, randomizedQuestions, currentQuestionIndex, userAnswers, score
     };
     localStorage.setItem('mind_app_state', JSON.stringify(state));
@@ -165,6 +188,7 @@ function saveLocalState(status) {
 function restoreSession(state) {
     quizId = state.quizId;
     sessionToken = state.sessionToken;
+    dynamicApiKey = state.dynamicApiKey;
     candidateInfo = state.candidateInfo;
     questions = state.questions;
     randomizedQuestions = state.randomizedQuestions;
@@ -180,10 +204,9 @@ function restoreSession(state) {
 }
 
 function forceExitHandler(e) {
-    // Hantar markah semasa ke pangkalan data menggunakan navigator.sendBeacon
     sendForceExitBeacon();
     e.preventDefault();
-    e.returnValue = "Amaran: Anda akan meninggalkan kuiz. Markah semasa anda akan direkodkan secara paksa!";
+    e.returnValue = "Amaran keras: Meninggalkan halaman kuiz akan merekodkan markah semasa secara paksa!";
     return e.returnValue;
 }
 
@@ -222,7 +245,9 @@ function calculateCurrentPercentage() {
     return totalQ > 0 ? Math.round((correctCount / totalQ) * 100) : 0;
 }
 
-// Logik Enjin Kuiz & UI
+// ==========================================================================
+// QUIZ ENGINE FLOW MANAGEMENT
+// ==========================================================================
 function loadQuestion() {
     clearInterval(timerInterval);
     timeLeft = 30;
@@ -238,7 +263,6 @@ function loadQuestion() {
     document.getElementById('total-q-num').textContent = randomizedQuestions.length;
     document.getElementById('question-text').textContent = q.questionText;
 
-    // Paparan Imej Soalan
     const imageHolder = document.getElementById('image-holder');
     imageHolder.innerHTML = '';
     if (q.imageDriveUrl && q.imageDriveUrl.trim() !== "") {
@@ -248,37 +272,34 @@ function loadQuestion() {
         imageHolder.appendChild(img);
     }
 
-    // Paparan Pilihan Jawapan Rawak
     const ansButtons = document.querySelectorAll('.answer-btn');
     ansButtons.forEach((btn, idx) => {
         btn.classList.remove('selected');
         const optData = q.shuffledOptions[idx];
         const prefixMap = ['A', 'B', 'C', 'D'];
         
-        // Tetapkan huruf paparan dan teksnya
         btn.dataset.option = prefixMap[idx];
         btn.querySelector('.prefix').textContent = prefixMap[idx];
         btn.querySelector('span:not(.prefix)').textContent = optData.text;
 
-        // Semak status jika sudah dijawab (Sokongan penyerahan ulangan / interupsi)
         if (userAnswers[q.questionText] === prefixMap[idx]) {
             btn.classList.add('selected');
         }
     });
 
-    // Kendali butang
     document.getElementById('btn-confirm-answer').disabled = !userAnswers[q.questionText];
     if(currentQuestionIndex === randomizedQuestions.length - 1) {
         document.getElementById('btn-confirm-answer').textContent = "Selesai Kuiz";
+    } else {
+        document.getElementById('btn-confirm-answer').textContent = "Sahkan Jawapan";
     }
 
-    // Pemasa Undur 30 Saat
     timerInterval = setInterval(() => {
         timeLeft--;
         document.getElementById('timer').textContent = timeLeft;
         if (timeLeft <= 0) {
             clearInterval(timerInterval);
-            alert("Masa untuk soalan ini tamat!");
+            alert("Masa tamat untuk soalan ini! Automatik ke soalan seterusnya.");
             autoNextQuestion();
         }
     }, 1000);
@@ -287,7 +308,6 @@ function loadQuestion() {
 document.querySelectorAll('.answer-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
         document.querySelectorAll('.answer-btn').forEach(b => b.classList.remove('selected'));
-        // Dapatkan elemen butang asas secara mutlak
         const currentBtn = e.currentTarget;
         currentBtn.classList.add('selected');
         
@@ -295,8 +315,6 @@ document.querySelectorAll('.answer-btn').forEach(btn => {
         userAnswers[q.questionText] = currentBtn.dataset.option;
         
         document.getElementById('btn-confirm-answer').disabled = false;
-        
-        // Simpan State Tempatan
         saveLocalState('IN_PROGRESS');
     });
 });
@@ -304,14 +322,10 @@ document.querySelectorAll('.answer-btn').forEach(btn => {
 document.getElementById('btn-confirm-answer').addEventListener('click', () => {
     const q = randomizedQuestions[currentQuestionIndex];
     if (!userAnswers[q.questionText]) {
-        alert("Sila pilih jawapan terlebih dahulu.");
+        alert("Sila pilih satu jawapan.");
         return;
     }
-    
-    // Logik Markah Terkini
     updateScoreLive();
-    
-    // Pergi ke soalan seterusnya secara automatik
     autoNextQuestion();
 });
 
@@ -333,15 +347,15 @@ function autoNextQuestion() {
     loadQuestion();
 }
 
+// ==========================================================================
+// RESULT PROCESSING & INTEGRATION WITH GEMINI AI
+// ==========================================================================
 async function finishQuiz() {
-    // Bersihkan pendengar force exit
     window.removeEventListener('beforeunload', forceExitHandler);
     document.removeEventListener('visibilitychange', visibilityChangeHandler);
-
     clearInterval(timerInterval);
     saveLocalState('SUBMITTED');
 
-    // Kira markah akhir
     let totalCorrect = 0;
     randomizedQuestions.forEach(q => {
         if (userAnswers[q.questionText] === q.newCorrectAnswer) {
@@ -350,14 +364,10 @@ async function finishQuiz() {
     });
     score = Math.round((totalCorrect / randomizedQuestions.length) * 100);
 
-    // Paparan Skrin Keputusan
     switchScreen('result-screen');
     document.getElementById('final-score').textContent = score;
 
-    // Hantar Data ke Pelayan Pangkalan Data Sheets melalui API
     submitFinalResultToSheet(score);
-
-    // Jana Analisis & Nota Menggunakan Gemini AI
     await generateAiAnalysisAndNotes(score, randomizedQuestions, userAnswers);
 }
 
@@ -380,16 +390,14 @@ async function submitFinalResultToSheet(finalScore) {
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify(payload)
         });
-        // Bersihkan state dari LocalStorage
         localStorage.removeItem('mind_app_state');
     } catch(e) {
-        console.error("Gagal menyimpan markah terus ke pangkalan data", e);
+        console.error("Gagal menghantar markah akhir ke pelayan:", e);
     }
 }
 
-// Gemini AI Integration berserta Rate Limit Exponential Backoff (HTTP 429)
+// GEMINI AI ENGINE BERSIH 100% (Membaca dynamicApiKey dari parameter URL)
 async function generateAiAnalysisAndNotes(finalScore, rQuestions, answers) {
-    // Sediakan payload data salah, topik salah dan pilihan/jawapan betul untuk dihantar kepada Gemini API
     const wrongQuestionsList = [];
     const wrongTopicsList = [];
     const selectedAnsText = [];
@@ -401,7 +409,7 @@ async function generateAiAnalysisAndNotes(finalScore, rQuestions, answers) {
         
         if (selected !== correct) {
             wrongQuestionsList.push(q.questionText);
-            wrongTopicsList.push(q.questionText.substring(0, 30) + "..."); // Anggaran topik soalan
+            wrongTopicsList.push(q.questionText.substring(0, 30) + "..."); 
             selectedAnsText.push(selected);
             correctAnsText.push(correct);
         }
@@ -428,13 +436,14 @@ async function generateAiAnalysisAndNotes(finalScore, rQuestions, answers) {
     [nota]
     `;
 
-    const apiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    // Titik akhir pautan API menggunakan Kunci Dinamik yang dihantar pensyarah secara rawak
+    const apiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${dynamicApiKey}`;
     const requestBody = {
         contents: [{ parts: [{ text: promptText }] }]
     };
 
     let attempts = 0;
-    const backoffDelays = [3000, 5000, 8000, 13000]; // Exponential Backoff (3s, 5s, 8s, 13s)
+    const backoffDelays = [3000, 5000, 8000, 13000]; // Exponential Backoff: 3s, 5s, 8s, 13s
 
     while (attempts <= backoffDelays.length) {
         try {
@@ -446,30 +455,28 @@ async function generateAiAnalysisAndNotes(finalScore, rQuestions, answers) {
 
             if (response.status === 429) {
                 if (attempts === backoffDelays.length) {
-                    throw new Error("Had Kuota AI (Rate Limit 429) telah dicapai. Sila cuba sebentar lagi.");
+                    throw new Error("Had Kuota Gemini API (Rate Limit) penuh.");
                 }
-                // Tunggu berdasarkan backoff delay
                 await new Promise(resolve => setTimeout(resolve, backoffDelays[attempts]));
                 attempts++;
                 continue;
             }
 
             if (!response.ok) {
-                throw new Error(`Ralat API AI: ${response.status}`);
+                throw new Error(`Ralat Respons: ${response.status}`);
             }
 
             const data = await response.json();
             const rawMarkdownText = data.candidates[0].content.parts[0].text;
             
-            // Format output pembersihan markdown mudah kepada HTML
             parseAndDisplayAiOutput(rawMarkdownText);
             return;
 
         } catch(e) {
-            console.error("Percubaan Gemini API gagal. Melakukan backoff...", e);
+            console.warn("Percubaan API AI tergendala. Melakukan anjakan masa undur...", e);
             if(attempts === backoffDelays.length) {
-                document.getElementById('ai-feedback').textContent = "Gagal mendapatkan maklum balas.";
-                document.getElementById('ai-study-notes').textContent = "Sistem gagal mengakses AI kerana had kuota percuma. Sila muat semula atau hubungi pensyarah.";
+                document.getElementById('ai-feedback').textContent = "Gagal memproses maklum balas.";
+                document.getElementById('ai-study-notes').textContent = "Pihak AI sibuk pada masa ini. Sila cetak keputusan dan hubungi pensyarah.";
                 return;
             }
             await new Promise(resolve => setTimeout(resolve, backoffDelays[attempts]));
@@ -479,26 +486,27 @@ async function generateAiAnalysisAndNotes(finalScore, rQuestions, answers) {
 }
 
 function parseAndDisplayAiOutput(markdownText) {
-    // Pembersihan teks asas untuk memaparkan format analisis AI
     const feedbackRegex = /\*\*Maklum Balas Prestasi:\*\*([\s\S]*?)(?=\*\*Nota Kajian Peribadi:\*\*|$)/i;
     const notesRegex = /\*\*Nota Kajian Peribadi:\*\*([\s\S]*?)$/i;
 
     const feedbackMatch = markdownText.match(feedbackRegex);
     const notesMatch = markdownText.match(notesRegex);
 
-    const feedbackText = feedbackMatch ? feedbackMatch[1].trim() : "Prestasi cemerlang atau tiada maklum balas dijana.";
+    const feedbackText = feedbackMatch ? feedbackMatch[1].trim() : "Tahniah! Tiada kelemahan ketara dikesan.";
     const notesText = notesMatch ? notesMatch[1].trim() : markdownText;
 
     document.getElementById('ai-feedback').textContent = feedbackText;
     document.getElementById('ai-study-notes').textContent = notesText;
 }
 
-// PDF Export Logik
+// ==========================================================================
+// DOCUMENT OPERATIONS (PDF EXPORT & PRINT)
+// ==========================================================================
 document.getElementById('btn-download-pdf').addEventListener('click', () => {
     const element = document.getElementById('pdf-content-area');
     const opt = {
         margin:       10,
-        filename:     `Nota_Kajian_${candidateInfo.id}.pdf`,
+        filename:     `Nota_Minda_Kuiz_${candidateInfo.id}.pdf`,
         image:        { type: 'jpeg', quality: 0.98 },
         html2canvas:  { scale: 2 },
         jsPDF:        { unit: 'mm', orientation: 'portrait' }
