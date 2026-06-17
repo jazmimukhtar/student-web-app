@@ -4,7 +4,7 @@
 // Nota Keselamatan: GEMINI_API_KEY dibiarkan kosong untuk keselamatan GitHub Public.
 // Kunci API akan dibaca secara selamat melalui parameter URL (?key=AIzaSy...)
 const GEMINI_API_KEY = ""; 
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbx0a74qc1p5btbw6tu--FOF9JcjgdAbEj2pSqRgZJ3IEfPHL6VgFPVs0JkzMkjWAWlZ/exec"; 
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzqeMz2r9lRHb9fe30uGK8vmuWKZaNhhicHCg3ClqCBorfMU3XD2j5SpD555L6XpS_z/exec"; 
 
 let quizId = null;
 let sessionToken = null;
